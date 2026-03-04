@@ -1,15 +1,70 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>org.jetbrains.plugins.template</id>
-    <name>IntelliJ Platform Plugin Template</name>
-    <vendor>JetBrains</vendor>
+    <id>com.github.darkmukke.nomadpack</id>
+    <name>Nomad Pack Support</name>
+    <vendor>darkmukke</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends optional="true" config-file="nomad-hcl.xml">org.intellij.plugins.hcl</depends>
+    <depends optional="true">org.intellij.plugins.markdown</depends>
 
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <description><![CDATA[
+        Provides support for HashiCorp Nomad Pack template files, including:
+        <ul>
+            <li>Nomad Pack Registry detection (README + LICENSE + packs/)</li>
+            <li>File type detection for .nomad.tpl and .tpl files in Nomad Packs</li>
+            <li>Automatic .tpl file override in Nomad Pack Registries</li>
+            <li>Syntax highlighting for [[ ]] template expressions</li>
+            <li>Language injection in .nomad.tpl files</li>
+            <li>Pack structure detection in Project view</li>
+            <li>Context-aware autocompletion for Nomad stanzas and properties</li>
+            <li>Variable autocompletion from variables.hcl</li>
+            <li>Error highlighting for invalid stanza hierarchy</li>
+        </ul>
+    ]]></description>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="org.jetbrains.plugins.template.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="org.jetbrains.plugins.template.startup.MyProjectActivity" />
+        <!-- Languages -->
+        <lang.parserDefinition language="NomadTpl"
+                               implementationClass="com.github.darkmukke.nomadpack.parser.NomadTplParserDefinition"/>
+
+        <!-- File types -->
+        <fileType name="Nomad"
+                  implementationClass="com.github.darkmukke.nomadpack.filetype.NomadFileType"
+                  fieldName="INSTANCE"
+                  language="NomadTpl"
+                  extensions="nomad"/>
+        <fileType name="Nomad HCL Template"
+                  implementationClass="com.github.darkmukke.nomadpack.filetype.NomadHclTplFileType"
+                  fieldName="INSTANCE"
+                  language="NomadTpl"
+                  extensions="nomad.tpl"/>
+        <fileType name="Nomad Template"
+                  implementationClass="com.github.darkmukke.nomadpack.filetype.NomadTplFileType"
+                  fieldName="INSTANCE"
+                  language="NomadTpl"
+                  extensions="tpl"/>
+
+        <!-- File Type Detector for .tpl files in Nomad Packs -->
+        <fileType.fileTypeDetector implementation="com.github.darkmukke.nomadpack.filetype.NomadPackFileTypeDetector"/>
+
+        <!-- Syntax Highlighting -->
+        <lang.syntaxHighlighterFactory language="NomadTpl"
+                                       implementationClass="com.github.darkmukke.nomadpack.highlighter.NomadTplSyntaxHighlighterFactory"/>
+
+        <!-- Project View -->
+        <treeStructureProvider implementation="com.github.darkmukke.nomadpack.projectview.NomadPackTreeStructureProvider"/>
+
+        <!-- Code Completion -->
+        <completion.contributor language="NomadTpl"
+                                implementationClass="com.github.darkmukke.nomadpack.completion.NomadTplCompletionContributor"/>
+
+        <!-- Error Highlighting -->
+        <annotator language="NomadTpl"
+                   implementationClass="com.github.darkmukke.nomadpack.annotator.NomadStanzaHierarchyAnnotator"/>
+
+        <!-- Markdown Code Fence Support -->
+        <markdown.codeFenceLanguageProvider
+                implementation="com.github.darkmukke.nomadpack.markdown.NomadPackCodeFenceLanguageProvider"/>
     </extensions>
 </idea-plugin>
