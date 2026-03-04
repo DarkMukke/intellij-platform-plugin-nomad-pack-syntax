@@ -2,7 +2,19 @@
 
 [![Build](https://github.com/darkmukke/intellij-platform-plugin-nomad-pack-syntax/workflows/Build/badge.svg)](https://github.com/darkmukke/intellij-platform-plugin-nomad-pack-syntax/actions)
 
+<!-- Plugin description -->
 IntelliJ IDEA plugin providing comprehensive support for [HashiCorp Nomad Pack](https://github.com/hashicorp/nomad-pack) template files and registries.
+
+Features include:
+- Nomad Pack Registry detection (README + LICENSE + packs/)
+- Context-aware autocompletion for Nomad stanzas and properties
+- Syntax highlighting for `[[ ]]` Go template expressions
+- Variable completion from `variables.hcl`
+- Error highlighting for invalid stanza hierarchy
+- Support for 70+ Nomad stanzas (based on Nomad v1.11.x)
+- HCL language injection in template files
+- Custom icons for packs, templates, and metadata files
+<!-- Plugin description end -->
 
 This is my first IntelliJ plugin, if you have any suggestions, feel free to open an issue or submit a PR.
 
