@@ -26,7 +26,7 @@ class NomadTplLanguageInjector : MultiHostInjector {
         val text = context.text
         if (!text.contains("[[") || !text.contains("]]")) return
 
-        // Find all [[ ]] regions and inject template language
+        // Find all [[ ]] regions and inject a template language
         var startIndex = 0
         while (true) {
             val openIndex = text.indexOf("[[", startIndex)
@@ -49,7 +49,7 @@ class NomadTplLanguageInjector : MultiHostInjector {
                 )
                 registrar.doneInjecting()
             } catch (e: Exception) {
-                // If injection fails, skip this element
+                // If the injection fails, skip this element
             }
 
             startIndex = closeIndex + 2

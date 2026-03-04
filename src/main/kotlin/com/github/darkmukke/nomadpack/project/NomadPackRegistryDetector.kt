@@ -48,7 +48,7 @@ object NomadPackRegistryDetector {
 
         // Registry is valid if it has README, LICENSE, and packs/ directory
         // Or if it has packs/ with at least one valid pack (more lenient)
-        return (hasReadme && hasLicense && packsDir.exists) || hasValidPacks
+        return (hasReadme && hasLicense && packsDir.exists()) || hasValidPacks
     }
 
     /**

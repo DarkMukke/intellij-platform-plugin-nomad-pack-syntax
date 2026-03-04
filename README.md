@@ -4,6 +4,8 @@
 
 IntelliJ IDEA plugin providing comprehensive support for [HashiCorp Nomad Pack](https://github.com/hashicorp/nomad-pack) template files and registries.
 
+This is my first IntelliJ plugin, if you have any suggestions, feel free to open an issue or submit a PR.
+
 ## Features
 
 ### 🎯 Smart Project Detection
@@ -156,6 +158,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built on the [IntelliJ Platform Plugin Template](https://github.com/JetBrains/intellij-platform-plugin-template)
 - Nomad job specification based on [HashiCorp Nomad v1.11.x](https://developer.hashicorp.com/nomad/docs/job-specification)
 - Inspired by the [HCL plugin](https://github.com/VladRassokhin/intellij-hcl)
+- Written with Claude AI Assistant
 
 ## Support
 

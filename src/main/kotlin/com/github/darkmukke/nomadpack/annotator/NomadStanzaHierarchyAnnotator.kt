@@ -13,13 +13,6 @@ import com.intellij.psi.PsiElement
  */
 class NomadStanzaHierarchyAnnotator : Annotator {
 
-    companion object {
-        // Cache the regex pattern for performance
-        private val stanzaBlockPattern by lazy {
-            Regex(NomadStanzaHierarchy.buildStanzaMatchPattern())
-        }
-    }
-
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         // Performance optimization: Only process elements that could be block declarations
         // Skip whitespace, comments, and other non-relevant elements
@@ -214,4 +207,9 @@ class NomadStanzaHierarchyAnnotator : Annotator {
             StanzaContext.CHANGE_SCRIPT -> "change_script block"
         }
     }
+}
+
+// Cache the regex pattern for performance
+private val stanzaBlockPattern by lazy {
+    Regex(NomadStanzaHierarchy.buildStanzaMatchPattern())
 }

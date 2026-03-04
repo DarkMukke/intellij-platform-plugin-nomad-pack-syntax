@@ -31,7 +31,6 @@ class NomadTplParserDefinition : ParserDefinition {
 
     override fun createFile(viewProvider: FileViewProvider): PsiFile = NomadTplFile(viewProvider)
 
-    companion object {
-        val FILE = IFileElementType(NomadTplLanguage)
-    }
 }
+
+val FILE = IFileElementType(NomadTplLanguage)
