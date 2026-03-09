@@ -16,6 +16,7 @@
             <li>Automatic .tpl file override in Nomad Pack Registries</li>
             <li>Syntax highlighting for [[ ]] template expressions</li>
             <li>Language injection in .nomad.tpl files</li>
+            <li>Code formatting with 2-space indentation for blocks and templates</li>
             <li>Pack structure detection in Project view</li>
             <li>Context-aware autocompletion for Nomad stanzas and properties</li>
             <li>Variable autocompletion from variables.hcl</li>
@@ -62,6 +63,16 @@
         <!-- Error Highlighting -->
         <annotator language="NomadTpl"
                    implementationClass="com.github.darkmukke.nomadpack.annotator.NomadStanzaHierarchyAnnotator"/>
+
+        <!-- Code Formatting -->
+        <lang.formatter language="NomadTpl"
+                        implementationClass="com.github.darkmukke.nomadpack.formatter.NomadTplFormattingModelBuilder"/>
+        <langCodeStyleSettingsProvider
+                implementation="com.github.darkmukke.nomadpack.formatter.NomadTplLanguageCodeStyleSettingsProvider"/>
+        <codeStyleSettingsProvider
+                implementation="com.github.darkmukke.nomadpack.formatter.NomadTplCodeStyleSettingsProvider"/>
+        <lineIndentProvider
+                implementation="com.github.darkmukke.nomadpack.formatter.NomadTplLineIndentProvider"/>
 
         <!-- Markdown Code Fence Support -->
         <markdown.codeFenceLanguageProvider

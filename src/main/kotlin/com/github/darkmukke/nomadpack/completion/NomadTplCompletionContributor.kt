@@ -31,6 +31,19 @@ class NomadTplCompletionContributor : CompletionContributor() {
             VariableCompletionProvider()
         )
     }
+
+    override fun invokeAutoPopup(position: com.intellij.psi.PsiElement, typeChar: Char): Boolean {
+        // Auto-popup for:
+        // - Letters (a-z, A-Z) that could start stanzas/properties
+        // - Dot (.) for variable completion
+        // - Underscore (_) for properties like ephemeral_disk
+        return when {
+            typeChar == '.' -> true
+            typeChar.isLetter() -> true
+            typeChar == '_' -> true
+            else -> false  // No popup for newlines, braces, spaces, etc.
+        }
+    }
 }
 
 /**

@@ -13,6 +13,12 @@ import com.intellij.psi.PsiElement
  */
 class NomadStanzaHierarchyAnnotator : Annotator {
 
+    companion object {
+        // Cache context results to avoid repeated expensive calculations
+        private val contextCache = mutableMapOf<Int, StanzaContext>()
+        private var lastCacheCleanup = System.currentTimeMillis()
+    }
+
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         // Performance optimization: Only process elements that could be block declarations
         // Skip whitespace, comments, and other non-relevant elements
@@ -32,8 +38,17 @@ class NomadStanzaHierarchyAnnotator : Annotator {
         // Skip if this is not a recognized stanza (quick lookup in set)
         if (!isRecognizedStanza(stanzaName)) return
 
-        // Determine parent context
-        val parentContext = determineParentContext(element)
+        // Determine parent context with caching
+        val now = System.currentTimeMillis()
+        if (now - lastCacheCleanup > 1000) {
+            contextCache.clear()
+            lastCacheCleanup = now
+        }
+
+        val elementHash = element.textRange.startOffset
+        val parentContext = contextCache.getOrPut(elementHash) {
+            determineParentContext(element)
+        }
 
         // Check if this stanza is valid in the parent context
         val validStanzas = NomadStanzaHierarchy.getValidStanzas(parentContext)
@@ -65,9 +80,24 @@ class NomadStanzaHierarchyAnnotator : Annotator {
         var current: PsiElement? = element.parent
 
         // Walk up the PSI tree to find parent block names
+        // Limit to 12 iterations (max Nomad nesting depth is 8-9)
         var depth = 0
-        while (current != null && depth < 20) {
+        while (current != null && depth < 12) {
             val text = current.text
+
+            // Early exit for blank or tiny elements
+            if (text.isBlank() || text.length < 5) {
+                current = current.parent
+                depth++
+                continue
+            }
+
+            // Skip very large elements for performance
+            if (text.length > 50000) {
+                current = current.parent
+                depth++
+                continue
+            }
 
             // Skip if this is the same element (avoid matching itself)
             if (current == element) {
@@ -77,7 +107,12 @@ class NomadStanzaHierarchyAnnotator : Annotator {
             }
 
             // Remove template expressions [[ ]] to avoid false matches
-            val cleanedText = removeTemplateExpressions(text)
+            // Only do this expensive operation if template expressions are present
+            val cleanedText = if (text.contains("[[")) {
+                removeTemplateExpressions(text)
+            } else {
+                text
+            }
 
             // Try to extract block name using the cached regex pattern
             val blockMatch = stanzaBlockPattern.find(cleanedText)

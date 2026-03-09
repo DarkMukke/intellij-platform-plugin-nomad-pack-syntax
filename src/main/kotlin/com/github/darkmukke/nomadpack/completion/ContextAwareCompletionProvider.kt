@@ -21,6 +21,22 @@ class ContextAwareCompletionProvider : CompletionProvider<CompletionParameters>(
         private val stanzaBlockPattern by lazy {
             Regex(NomadStanzaHierarchy.buildStanzaMatchPattern())
         }
+
+        // Cache context results to avoid repeated expensive calculations
+        private val contextCache = mutableMapOf<Pair<Int, Int>, StanzaContext>()
+        private var cacheInvalidationTimestamp = System.currentTimeMillis()
+
+        private fun getCachedContext(offset: Int, fileModificationStamp: Long, calculator: () -> StanzaContext): StanzaContext {
+            // Invalidate cache every 500ms to handle file changes
+            val now = System.currentTimeMillis()
+            if (now - cacheInvalidationTimestamp > 500) {
+                contextCache.clear()
+                cacheInvalidationTimestamp = now
+            }
+
+            val key = offset to fileModificationStamp.toInt()
+            return contextCache.getOrPut(key) { calculator() }
+        }
     }
 
     override fun addCompletions(
@@ -29,34 +45,56 @@ class ContextAwareCompletionProvider : CompletionProvider<CompletionParameters>(
         result: CompletionResultSet
     ) {
         val position = parameters.position
-        val blockContext = determineBlockContext(position)
-        
+        val file = parameters.originalFile
+        val modStamp = file.virtualFile?.modificationStamp ?: 0L
+
+        val blockContext = getCachedContext(
+            position.textRange.startOffset,
+            modStamp
+        ) {
+            determineBlockContext(position)
+        }
+
         // Add valid stanzas for this context
+        // IMPORTANT: Only add stanzas if there are valid ones for this context
+        // Some contexts (like PORT, HEADER, etc.) have NO child stanzas - only properties
         val validStanzas = NomadStanzaHierarchy.getValidStanzas(blockContext)
-        for (stanza in validStanzas) {
-            result.addElement(
-                LookupElementBuilder.create(stanza.name)
-                    .withIcon(AllIcons.Nodes.Class)
-                    .withTypeText(getContextName(blockContext))
-                    .withTailText(" { ... }", true)
-                    .withInsertHandler { ctx, _ ->
-                        val document = ctx.document
-                        val offset = ctx.tailOffset
-                        // Insert opening brace and newline
-                        document.insertString(offset, " {\n  \n}")
-                        ctx.editor.caretModel.moveToOffset(offset + 4)
-                    }
-                    .bold()
-            )
+
+        // Only suggest stanzas if this context actually allows child stanzas
+        if (validStanzas.isNotEmpty()) {
+            for (stanza in validStanzas) {
+                result.addElement(
+                    LookupElementBuilder.create(stanza.name)
+                        .withIcon(AllIcons.Nodes.Class)
+                        .withTypeText(getContextName(blockContext))
+                        .withTailText(" { ... }", true)
+                        .withInsertHandler { ctx, _ ->
+                            val document = ctx.document
+                            val offset = ctx.tailOffset
+                            // Insert opening brace and newline
+                            document.insertString(offset, " {\n  \n}")
+                            ctx.editor.caretModel.moveToOffset(offset + 4)
+                        }
+                        .bold()
+                )
+            }
         }
         
         // Add valid properties for this context
         val validProperties = NomadStanzaHierarchy.getValidProperties(blockContext)
 
-        // If we have very few properties (suggests wrong context detection),
-        // also include commonly used properties as fallback
-        val propertiesToShow = if (validProperties.size < 3 && blockContext != StanzaContext.ROOT) {
-            // Include properties from potential parent contexts as fallback
+        // Special handling for unclear context
+        // If we have no valid stanzas and we're getting weird properties (like constraint props),
+        // it means context detection failed - better to show nothing than wrong suggestions
+        val propertiesToShow = if (validStanzas.isEmpty() && blockContext == StanzaContext.ROOT) {
+            // No clear context - don't show properties
+            emptyList()
+        } else if (validProperties.isEmpty() && validStanzas.isEmpty()) {
+            // Neither properties nor stanzas - context might be wrong or this is a leaf block
+            emptyList()
+        } else if (validProperties.size < 3 && blockContext != StanzaContext.ROOT) {
+            // If we have very few properties (suggests wrong context detection),
+            // also include commonly used properties as fallback
             validProperties + NomadStanzaHierarchy.properties.filter {
                 it.name in setOf("name", "port", "tags", "type", "driver", "count")
             }
@@ -136,13 +174,28 @@ class ContextAwareCompletionProvider : CompletionProvider<CompletionParameters>(
     }
     
     private fun determineBlockContext(element: PsiElement): StanzaContext {
-        val blockNames = mutableListOf<String>()
-        var current: PsiElement? = element.parent
+        // Store blocks with their ranges to sort by nesting level
+        data class BlockInfo(val name: String, val startOffset: Int, val endOffset: Int, val size: Int)
+        val blocks = mutableListOf<BlockInfo>()
+
+        var current: PsiElement? = element
+
+        // Get the cursor offset in the file
+        val cursorOffset = element.textRange.startOffset
 
         // Walk up the PSI tree to find block names
+        // Maximum Nomad nesting depth is ~8-9 levels (e.g., job > group > task > connect > sidecar_service > proxy > upstreams > mesh_gateway)
+        // Set to 12 to allow for future Nomad updates and PSI tree structure variations
         var depth = 0
-        while (current != null && depth < 30) {  // Increased depth for nested templates
+        while (current != null && depth < 12) {
             val text = current.text
+
+            // Early exit: if text is blank or too small to contain blocks
+            if (text.isBlank() || text.length < 5) {
+                current = current.parent
+                depth++
+                continue
+            }
 
             // Skip very large elements (performance)
             if (text.length > 50000) {
@@ -152,16 +205,44 @@ class ContextAwareCompletionProvider : CompletionProvider<CompletionParameters>(
             }
 
             // Remove template expressions [[ ]] to avoid false matches
-            val cleanedText = removeTemplateExpressions(text)
+            // Only clean if the text contains template expressions (performance optimization)
+            val cleanedText = if (text.contains("[[")) {
+                removeTemplateExpressions(text)
+            } else {
+                text
+            }
 
-            // Try to extract block name using the cached regex pattern
-            val blockMatch = stanzaBlockPattern.find(cleanedText)
+            // Find ALL blocks in this element and determine which one contains the cursor
+            val elementOffset = current.textRange.startOffset
 
-            if (blockMatch != null) {
+            // Limit number of blocks to check per PSI element for performance
+            var blocksChecked = 0
+            for (blockMatch in stanzaBlockPattern.findAll(cleanedText)) {
+                if (blocksChecked++ > 20) break  // Safety limit
+
                 val stanzaName = blockMatch.groupValues[1]
-                // Only add if not already in the list (avoid duplicates from nested PSI)
-                if (blockNames.isEmpty() || blockNames[0] != stanzaName) {
-                    blockNames.add(0, stanzaName)
+
+                // Find the opening brace position
+                val braceIndex = text.indexOf('{', blockMatch.range.first)
+                if (braceIndex == -1) continue
+
+                // Quick check: is cursor even after this opening brace?
+                val absoluteBlockStart = elementOffset + braceIndex
+                if (cursorOffset < absoluteBlockStart) continue
+
+                // Find the matching closing brace
+                val blockEndOffset = findMatchingBrace(text, braceIndex)
+                if (blockEndOffset == -1) continue
+
+                val absoluteBlockEnd = elementOffset + blockEndOffset
+
+                // Check if cursor is inside this block
+                if (cursorOffset >= absoluteBlockStart && cursorOffset <= absoluteBlockEnd) {
+                    // Check if we haven't added this block yet
+                    if (blocks.none { it.name == stanzaName }) {
+                        val blockSize = absoluteBlockEnd - absoluteBlockStart
+                        blocks.add(BlockInfo(stanzaName, absoluteBlockStart, absoluteBlockEnd, blockSize))
+                    }
                 }
             }
 
@@ -169,7 +250,35 @@ class ContextAwareCompletionProvider : CompletionProvider<CompletionParameters>(
             depth++
         }
 
-        return NomadStanzaHierarchy.determineContext(blockNames)
+        // Sort by size (largest first = outermost) to get correct nesting order
+        blocks.sortByDescending { it.size }
+        val blockNames = blocks.map { it.name }
+
+        return if (blockNames.isEmpty()) {
+            StanzaContext.ROOT
+        } else {
+            NomadStanzaHierarchy.determineContext(blockNames)
+        }
+    }
+
+    /**
+     * Find the position of the matching closing brace for a given opening brace
+     * Returns the index of the closing brace, or -1 if not found
+     */
+    private fun findMatchingBrace(text: String, openBraceIndex: Int): Int {
+        var depth = 1
+        var index = openBraceIndex + 1
+
+        while (index < text.length && depth > 0) {
+            when (text[index]) {
+                '{' -> depth++
+                '}' -> depth--
+            }
+            if (depth == 0) return index
+            index++
+        }
+
+        return -1 // No matching brace found
     }
 
     /**
